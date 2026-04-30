@@ -1,0 +1,41 @@
+{
+  "intrabar_assumption": "If both stop-loss and take-profit are touched in the same bar, the stop-loss is assumed to be hit first.",
+  "per_strategy": {
+    "A": {
+      "num_trades": 82,
+      "total_return": -1146.6745948791201,
+      "win_rate": 0.2804878048780488,
+      "profit_factor": 0.36183115777751085,
+      "max_drawdown": 1097.2190666198426,
+      "sharpe": -6.4174707773729684,
+      "sortino": -10.794411882799443,
+      "avg_trade_duration_seconds": 0.0,
+      "exposure_pct": 0.0,
+      "largest_losing_streak": 8
+    },
+    "B": {
+      "num_trades": 1,
+      "total_return": 2175.50048828125,
+      "win_rate": 1.0,
+      "profit_factor": null,
+      "max_drawdown": 0.0,
+      "sharpe": null,
+      "sortino": null,
+      "avg_trade_duration_seconds": 1036800.0,
+      "exposure_pct": 1.0,
+      "largest_losing_streak": 0
+    },
+    "C": {
+      "num_trades": 50,
+      "total_return": 28.0,
+      "win_rate": 0.56,
+      "profit_factor": 1.5384615384615385,
+      "max_drawdown": 31.0,
+      "sharpe": 72.08177174696678,
+      "sortino": null,
+      "avg_trade_duration_seconds": 60.0,
+      "exposure_pct": 1.0,
+      "largest_losing_streak": 5
+    }
+  }
+}

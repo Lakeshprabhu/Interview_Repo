@@ -1,0 +1,62 @@
+{
+  "strategy_id": "A",
+  "instrument": "EUR/USD",
+  "timeframe": "1 hour",
+  "data_source": "Not specified",
+  "entry_conditions": [
+    {
+      "condition_id": "1",
+      "expression": "Price breaks the high of the first hour after 8am London by 5 pips",
+      "indicators_required": [
+        "Price"
+      ]
+    },
+    {
+      "condition_id": "2",
+      "expression": "Price breaks the low of the first hour after 8am London by 5 pips",
+      "indicators_required": [
+        "Price"
+      ]
+    }
+  ],
+  "exit_conditions": [
+    {
+      "condition_id": "1",
+      "expression": "Target 1.5x risk is reached"
+    },
+    {
+      "condition_id": "2",
+      "expression": "Stop at the low/high of the first hour after 8am London"
+    },
+    {
+      "condition_id": "3",
+      "expression": "Close all positions before NY close"
+    }
+  ],
+  "position_sizing_rule": "Not specified",
+  "stop_loss_rule": "Stop at the low/high of the first hour after 8am London",
+  "take_profit_rule": "Target 1.5x risk",
+  "session_filters": [
+    "Skip Wednesdays"
+  ],
+  "risk_controls": [
+    "Close all positions before NY close"
+  ],
+  "explicit_ambiguities": [
+    {
+      "ambiguity": "What time zone is 8am?",
+      "assumption_used_for_backtest": "8am London time",
+      "impact_if_different": "Entry and exit times would shift, affecting trade outcomes."
+    },
+    {
+      "ambiguity": "What constitutes the NY close?",
+      "assumption_used_for_backtest": "5pm New York time",
+      "impact_if_different": "Closing positions at a different time could affect profitability and risk."
+    },
+    {
+      "ambiguity": "How is 'risk' defined for the 1.5x target?",
+      "assumption_used_for_backtest": "Risk is defined as the distance between entry and stop loss.",
+      "impact_if_different": "Different risk definitions could alter the take profit level."
+    }
+  ]
+}

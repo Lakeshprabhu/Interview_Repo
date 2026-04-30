@@ -1,0 +1,44 @@
+{
+  "strategy_id": "C",
+  "instrument": "Volatility 75 Index",
+  "timeframe": "1min",
+  "data_source": "Not specified",
+  "entry_conditions": [
+    {
+      "condition_id": "entry_1",
+      "expression": "Predict UP",
+      "indicators_required": []
+    }
+  ],
+  "exit_conditions": [
+    {
+      "condition_id": "exit_1",
+      "expression": "Reset to $1 stake after a win"
+    }
+  ],
+  "position_sizing_rule": "Fixed $1 stake, double stake on next tick if loss",
+  "stop_loss_rule": null,
+  "take_profit_rule": null,
+  "session_filters": [],
+  "risk_controls": [
+    "Stop trading session if drawdown > $200",
+    "Stop trading session after 50 trades"
+  ],
+  "explicit_ambiguities": [
+    {
+      "ambiguity": "What constitutes a 'win' or 'loss' in terms of price movement?",
+      "assumption_used_for_backtest": "A 'win' is when the price moves up after prediction, a 'loss' is otherwise.",
+      "impact_if_different": "Different definitions could alter the frequency of stake resets and drawdown calculations."
+    },
+    {
+      "ambiguity": "What is the time zone for the 1-minute timeframe?",
+      "assumption_used_for_backtest": "Assumed UTC time zone.",
+      "impact_if_different": "Different time zones could affect the timing and frequency of trades."
+    },
+    {
+      "ambiguity": "Is the drawdown calculated from the initial capital or from the peak equity?",
+      "assumption_used_for_backtest": "Assumed drawdown is calculated from the peak equity.",
+      "impact_if_different": "Different calculations could trigger session stops at different times."
+    }
+  ]
+}

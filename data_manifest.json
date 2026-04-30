@@ -1,0 +1,29 @@
+{
+  "generated_at_utc": "2026-04-30T16:45:40.576287+00:00",
+  "data_sources": {
+    "EURUSD=X": {
+      "provider": "yfinance",
+      "type": "historical_ohlcv",
+      "period": "1y",
+      "interval": "1d"
+    },
+    "QQQ": {
+      "provider": "yfinance",
+      "type": "historical_ohlcv",
+      "period": "1y",
+      "interval": "1d"
+    },
+    "GBM_SYNTH_1M": {
+      "provider": "internal_simulation",
+      "type": "synthetic",
+      "parameters": {
+        "process": "geometric_brownian_motion",
+        "drift": 0,
+        "sigma": "0.75 / sqrt(year)",
+        "seed": 123,
+        "timeframe": "1 minute or tick-equivalent",
+        "initial_price": 100
+      }
+    }
+  }
+}

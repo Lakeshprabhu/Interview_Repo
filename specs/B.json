@@ -1,0 +1,58 @@
+{
+  "strategy_id": "B",
+  "instrument": "QQQ",
+  "timeframe": "15min",
+  "data_source": "Not specified",
+  "entry_conditions": [
+    {
+      "condition_id": "entry_1",
+      "expression": "RSI(14) drops under 25",
+      "indicators_required": [
+        "RSI(14)"
+      ]
+    },
+    {
+      "condition_id": "entry_2",
+      "expression": "RSI(14) drops under 20",
+      "indicators_required": [
+        "RSI(14)"
+      ]
+    }
+  ],
+  "exit_conditions": [
+    {
+      "condition_id": "exit_1",
+      "expression": "RSI(14) reaches 50"
+    },
+    {
+      "condition_id": "exit_2",
+      "expression": "End of day"
+    }
+  ],
+  "position_sizing_rule": "Buy half position when RSI(14) drops under 25, add the rest if it goes under 20",
+  "stop_loss_rule": null,
+  "take_profit_rule": null,
+  "session_filters": [
+    "Do not trade in last 30 minutes"
+  ],
+  "risk_controls": [
+    "No short positions"
+  ],
+  "explicit_ambiguities": [
+    {
+      "ambiguity": "What time zone is considered for 'end of day'?",
+      "assumption_used_for_backtest": "Assumed Eastern Time (ET)",
+      "impact_if_different": "Different time zones could lead to different exit points and affect strategy performance."
+    },
+    {
+      "ambiguity": "What is the exact definition of 'end of day'?",
+      "assumption_used_for_backtest": "Assumed market close at 4 PM ET",
+      "impact_if_different": "A different end of day time could result in holding positions longer or exiting earlier."
+    },
+    {
+      "ambiguity": "What happens if RSI(14) does not reach 50 before end of day?",
+      "assumption_used_for_backtest": "Exit at end of day regardless of RSI level",
+      "impact_if_different": "Holding positions overnight could introduce additional risks and affect returns."
+    }
+  ]
+}

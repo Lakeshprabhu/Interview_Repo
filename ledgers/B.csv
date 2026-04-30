@@ -1,0 +1,2 @@
+strategy_id,entry_time,exit_time,direction,entry_price,exit_price,size,pnl,return_pct,exit_reason
+B,2026-03-27,2026-04-08,long,562.5800170898438,606.0900268554688,50.0,2175.50048828125,0.07734012663780142,rsi_target
