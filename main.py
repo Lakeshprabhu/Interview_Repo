@@ -219,10 +219,10 @@ def _resolve_intrabar(direction: str, sl: float, tp: float, bar_high: float, bar
     return hit_sl, hit_tp
 
 
-def backtest_strategy_a(df: pd.DataFrame) -> list:
+def backtest_strategy_a(df: pd.DataFrame, breakout_pips: float = 5.0) -> list:
     """Strategy A: London Breakout EUR/USD (daily-data approximation).
-    Long if today's high breaks prev-day high + 5 pips. SL = prev-day low, TP = 1.5R.
-    Skip Wednesdays. EOD exit if neither SL/TP hit. INTRABAR_ASSUMPTION applies.
+    Long if today's high breaks prev-day high + `breakout_pips` pips. SL = prev-day low,
+    TP = 1.5R. Skip Wednesdays. EOD exit if neither SL/TP hit. INTRABAR_ASSUMPTION applies.
     """
     df = df.copy()
     df.index = pd.to_datetime(df.index)
@@ -238,7 +238,7 @@ def backtest_strategy_a(df: pd.DataFrame) -> list:
         if ts.weekday() == 2:
             prev_high, prev_low = high, low
             continue
-        breakout = prev_high + 5 * pip
+        breakout = prev_high + breakout_pips * pip
         if high >= breakout:
             entry = breakout
             sl = prev_low
@@ -271,13 +271,15 @@ def _rsi(series: pd.Series, period: int = 14) -> pd.Series:
     return 100 - 100 / (1 + rs)
 
 
-def backtest_strategy_b(df: pd.DataFrame) -> list:
+def backtest_strategy_b(df: pd.DataFrame, rsi_entry: float = 25.0) -> list:
     """Strategy B: RSI(14) mean reversion on QQQ.
-    Enter half size when RSI<25, add second half when RSI<20, exit when RSI>=50.
-    Long-only. (Intraday last-30-min filter not applicable on daily data.)
+    Enter half size when RSI<rsi_entry, add second half when RSI<rsi_entry*0.8
+    (preserves baseline 25/20 ratio). Exit when RSI>=50. Long-only.
     """
     df = df.copy()
     df["rsi"] = _rsi(df["Close"], 14)
+    rsi_add = rsi_entry * 0.8
+    rsi_exit = 50.0
     base_size = 100  # shares
     trades = []
     in_pos = False
@@ -289,14 +291,14 @@ def backtest_strategy_b(df: pd.DataFrame) -> list:
         close = float(row["Close"])
         if pd.isna(rsi):
             continue
-        if not in_pos and rsi < 25:
+        if not in_pos and rsi < rsi_entry:
             legs = [(close, base_size / 2)]
             entry_time = ts
             in_pos, full_added = True, False
-        elif in_pos and not full_added and rsi < 20:
+        elif in_pos and not full_added and rsi < rsi_add:
             legs.append((close, base_size / 2))
             full_added = True
-        elif in_pos and rsi >= 50:
+        elif in_pos and rsi >= rsi_exit:
             prices = np.array([p for p, _ in legs])
             sizes = np.array([s for _, s in legs])
             avg_entry = float(np.average(prices, weights=sizes))
@@ -566,6 +568,148 @@ def critique_all_strategies(specs: dict, metrics: dict,
     return critiques
 
 
+def _windowed_backtests(strategy_id: str, df: pd.DataFrame, n_windows: int = 3) -> list:
+    cfg = BACKTEST_DISPATCH.get(strategy_id)
+    if cfg is None:
+        return []
+    fn, bpy = cfg["fn"], cfg["bars_per_year"]
+    chunks = np.array_split(df, n_windows)
+    out = []
+    for i, chunk in enumerate(chunks):
+        if not isinstance(chunk, pd.DataFrame):
+            chunk = pd.DataFrame(chunk)
+        trades = fn(chunk) if len(chunk) else []
+        ledger_df = pd.DataFrame(trades, columns=LEDGER_COLUMNS)
+        m = compute_metrics_for_ledger(ledger_df, bpy)
+        out.append({
+            "window": i + 1,
+            "start": str(chunk.index.min()) if len(chunk) else None,
+            "end": str(chunk.index.max()) if len(chunk) else None,
+            "metrics": m,
+        })
+    return out
+
+
+def _classify_walk_forward(window_results: list) -> str:
+    if any(w["metrics"].get("num_trades", 0) == 0 for w in window_results):
+        return "insufficient_data"
+    returns = [w["metrics"].get("total_return", 0.0) for w in window_results]
+    if len(returns) >= 2 and all(returns[i] < returns[i - 1] for i in range(1, len(returns))):
+        return "degrading"
+    signs = {1 if r > 0 else (-1 if r < 0 else 0) for r in returns}
+    if 1 in signs and -1 in signs:
+        return "unstable"
+    arr = np.array(returns, dtype=float)
+    mean = arr.mean()
+    std = arr.std(ddof=0)
+    if abs(mean) < 1e-9:
+        return "unstable"
+    return "stable" if (std / abs(mean)) < 1.0 else "unstable"
+
+
+def run_walk_forward(specs: dict, data: dict, out_path: str = "walk_forward.json") -> dict:
+    results = {}
+    for sid in specs:
+        cfg = BACKTEST_DISPATCH.get(sid)
+        if cfg is None or cfg["data_key"] not in data:
+            continue
+        windows = _windowed_backtests(sid, data[cfg["data_key"]], 3)
+        flag = _classify_walk_forward(windows)
+        results[sid] = {"stability_flag": flag, "windows": windows}
+        print(f"  {sid}: walk-forward = {flag}")
+    with Path(out_path).open("w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2, default=str)
+    return results
+
+
+SENSITIVITY_SWEEPS = {
+    "A": {"param_name": "breakout_pips", "values": [2.5, 5.0, 7.5], "kwarg": "breakout_pips"},
+    "B": {"param_name": "rsi_entry_threshold", "values": [12.5, 25.0, 37.5], "kwarg": "rsi_entry"},
+}
+
+
+def _sweep_strategy(strategy_id: str, df: pd.DataFrame, sweep_cfg: dict) -> list:
+    cfg = BACKTEST_DISPATCH[strategy_id]
+    fn, bpy = cfg["fn"], cfg["bars_per_year"]
+    rows = []
+    for v in sweep_cfg["values"]:
+        trades = fn(df, **{sweep_cfg["kwarg"]: v})
+        ledger_df = pd.DataFrame(trades, columns=LEDGER_COLUMNS)
+        rows.append({"param_value": v, "metrics": compute_metrics_for_ledger(ledger_df, bpy)})
+    return rows
+
+
+def build_sensitivity_prompt(strategy_id: str, param_name: str, sweep_results: list) -> str:
+    return (
+        "You are a quantitative risk reviewer interpreting parameter sensitivity. "
+        "You are given the deterministic backtest metrics for a single strategy across "
+        "three values of one tunable parameter. Output ONE JSON object with this schema:\n"
+        "{\n"
+        "  \"strategy_id\": \"string\",\n"
+        "  \"parameter_swept\": \"string\",\n"
+        "  \"robustness_assessment\": \"robust | sensitive | mixed\",\n"
+        "  \"rationale\": \"string\",\n"
+        "  \"key_observations\": [\"string\"]\n"
+        "}\n\n"
+        "RULES:\n"
+        "- Output ONLY the JSON object — no markdown fences, no prose.\n"
+        "- Be specific: cite the metric values across parameter settings.\n"
+        "- Do NOT compute or fabricate new metrics; only interpret what is given.\n\n"
+        f"STRATEGY ID: {strategy_id}\n"
+        f"PARAMETER SWEPT: {param_name}\n"
+        f"SWEEP RESULTS:\n{json.dumps(sweep_results, indent=2, default=str)}"
+    )
+
+
+def interpret_sensitivity(client: OpenAI, strategy_id: str, param_name: str, sweep_results: list):
+    prompt = build_sensitivity_prompt(strategy_id, param_name, sweep_results)
+    response = client.chat.completions.create(
+        model=LLM_MODEL,
+        messages=[
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": "Interpret the sensitivity now."},
+        ],
+        temperature=0,
+    )
+    raw = response.choices[0].message.content
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=re.MULTILINE)
+    try:
+        interp = json.loads(cleaned)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"LLM returned invalid JSON for sensitivity {strategy_id}: {e}\nRaw: {raw}") from e
+    return interp, prompt
+
+
+def run_parameter_sensitivity(specs: dict, data: dict,
+                              out_path: str = "parameter_sensitivity.json") -> dict:
+    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    out = {}
+    for sid, sweep_cfg in SENSITIVITY_SWEEPS.items():
+        if sid not in specs:
+            continue
+        cfg = BACKTEST_DISPATCH.get(sid)
+        if cfg is None or cfg["data_key"] not in data:
+            continue
+        sweep_results = _sweep_strategy(sid, data[cfg["data_key"]], sweep_cfg)
+        print(f"  {sid}: swept {sweep_cfg['param_name']} → {[r['param_value'] for r in sweep_results]}")
+        interp, prompt = interpret_sensitivity(client, sid, sweep_cfg["param_name"], sweep_results)
+        out[sid] = {
+            "parameter_swept": sweep_cfg["param_name"],
+            "sweep_results": sweep_results,
+            "interpretation": interp,
+        }
+        append_llm_audit_log(
+            stage="OPTIONAL_ROBUSTNESS_TESTS_COMPLETE",
+            strategy_id=sid,
+            prompt_text=prompt,
+            output_artifact=out_path,
+            input_artifacts=[f"ledgers/{sid}.csv", "metrics.json"],
+        )
+    with Path(out_path).open("w", encoding="utf-8") as f:
+        json.dump(out, f, indent=2, default=str)
+    return out
+
+
 def generate_report(metrics: dict, critiques: dict, out_path: str = "report.md") -> str:
     lines = [
         "# Strategy Validation Report",
@@ -676,6 +820,8 @@ def main():
         critiques = critique_all_strategies(specs, metrics)
         print(f"-> STRATEGIES_CRITIQUED ({len(critiques)} critiques written)")
 
+        run_walk_forward(specs, data)
+        run_parameter_sensitivity(specs, data)
         print("-> OPTIONAL_ROBUSTNESS_TESTS_COMPLETE")
 
         generate_report(metrics, critiques)
